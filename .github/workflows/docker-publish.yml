@@ -27,6 +27,6 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: udiecynthia/cynthias-hub:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/cynthias-hub:latest
           platforms: linux/amd64
           provenance: false

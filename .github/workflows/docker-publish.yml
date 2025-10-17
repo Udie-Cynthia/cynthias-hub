@@ -26,3 +26,5 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/cynthias-hub:latest
           platforms: linux/amd64
           provenance: false
+          # build-args: |
+          #   NEXT_PUBLIC_SITE_NAME=Cynthia's Hub

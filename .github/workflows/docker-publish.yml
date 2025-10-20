@@ -1,30 +1,70 @@
-name: Build and Push to Docker Hub
+name: Docker (GHCR)
 
 on:
   push:
-    branches: [ "main" ]
-  workflow_dispatch:
+    branches: [ "clean/main" ]
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      # DIAGNOSTIC: run Next build on the runner to show real errors
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - name: Install deps (runner)
+        run: npm ci --no-audit --no-fund
+      - name: Diagnostic Next build (runner - shows real error if any)
+        env:
+          CI: "true"
+          NEXT_PUBLIC_SITE_URL: "https://example.com"
+          NEXTAUTH_URL: "http://localhost:3000"
+          NEXTAUTH_SECRET: "devsecret"
+          DATABASE_URL: "file:./prisma/dev.db"
+        run: |
+          set -e
+          echo "Running NEXT diagnostic build on the runner..."
+          npm run build --workspaces=false
 
+      # Build & push to GHCR (lowercase path)
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/udie-cynthia/cynthias-hub
+          tags: |
+            type=raw,value=clean-main
+            type=sha
+
+      - name: Build and push (plain logs)
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/cynthias-hub:latest
           platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           provenance: false
-          # build-args: |
-          #   NEXT_PUBLIC_SITE_NAME=Cynthia's Hub
+          build-args: |
+            NEXT_PUBLIC_SITE_URL=https://example.com
+            NEXTAUTH_URL=http://localhost:3000
+            NEXTAUTH_SECRET=devsecret
+            DATABASE_URL=file:./prisma/dev.db
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: false
+          load: false

@@ -1,43 +1,30 @@
-# ---- Base versions
-FROM node:20-alpine AS base
+FROM node:20-bookworm-slim AS base
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NEXT_DISABLE_SWC_LOAD_FAILURE_WARNING=1
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
 
-# ---- Install deps (cached layer)
 FROM base AS deps
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl git curl && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
-# ---- Build (generate Prisma client + Next build)
-FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
-# copy only what's needed first (better cache)
-COPY prisma ./prisma
-RUN npx prisma generate
-# now copy the rest
+FROM deps AS builder
+ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
+ARG NEXTAUTH_URL=http://localhost:3000
+ARG NEXTAUTH_SECRET=devsecret
+ARG DATABASE_URL=file:./prisma/dev.db
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL} NEXTAUTH_URL=${NEXTAUTH_URL} NEXTAUTH_SECRET=${NEXTAUTH_SECRET} DATABASE_URL=${DATABASE_URL} CI=true
 COPY . .
-# Provide safe default for build-time public var
-ARG NEXT_PUBLIC_SITE_NAME="Cynthia's Hub"
-ENV NEXT_PUBLIC_SITE_NAME=$NEXT_PUBLIC_SITE_NAME
+RUN bash -lc 'if [ -d prisma ]; then npx prisma generate; fi'
 RUN npm run build
 
-# ---- Runtime image
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
+ENV NODE_ENV=production PORT=3000 HOST=0.0.0.0 NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-
-# (optional) run as non-root
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
-
-# Bring runtime files
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-
+RUN useradd -u 1001 -m nodeuser
+USER 1001
 EXPOSE 3000
-USER nextjs
-CMD ["npm","run","start"]
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["node","server.js"]

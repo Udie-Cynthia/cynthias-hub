@@ -1,18 +1,14 @@
-﻿version: "3.8"
 services:
   web:
     build: .
+    image: ghcr.io/Udie-Cynthia/cynthias-hub:clean-main
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=file:./dev.db
-      - JWT_SECRET=${JWT_SECRET}
-      - ADMIN_EMAIL=${ADMIN_EMAIL}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - NEXT_PUBLIC_SITE_NAME=Cynthias Hub
-      - CONTACT_EMAIL=${CONTACT_EMAIL}
-      - CONTACT_PHONE=${CONTACT_PHONE}
-      - CONTACT_LINKEDIN=${CONTACT_LINKEDIN}
+      - PORT=3000
+      - HOST=0.0.0.0
     volumes:
-      - ./:/app
-    command: sh -c "npx prisma generate && npm run start"
+      - ./public/uploads:/app/public/uploads
+    restart: unless-stopped

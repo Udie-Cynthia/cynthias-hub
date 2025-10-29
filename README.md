@@ -43,7 +43,7 @@ EC2_PUBLIC_IP=<your-ec2-ip>
 
  Secrets are stored securely under GitHub → Settings → Secrets → Actions
 
-☁️ Deployment Steps
+Deployment Steps
 
 Launch EC2 (Ubuntu 22.04)
 
